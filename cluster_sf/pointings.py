@@ -1,6 +1,6 @@
 from astropy.coordinates import SkyCoord
-from astropy.regions import RectangleSkyRegion
-from .constants import resolve_width, angular_scale
+from regions import RectangleSkyRegion, Regions 
+from constants import resolve_width, angular_scale
 import astropy.units as u
 import numpy as np
 
@@ -115,3 +115,12 @@ r_min2, r_max2 = np.abs(
     [bin1_err - bin1_mid, bin2_err - bin2_mid, bin3_err - bin3_mid, [0.0, 0.0]]
 ).T
 
+
+if __name__ == "__main__":
+    regs = Regions([reg_c1, reg_c2, reg_c3, reg_c4, reg_s, reg_n])
+    regs.write("three_pts.reg", format="ds9", overwrite=True)
+    #outlines = []
+    #for reg in regs:
+    #    outlines.append(reg.serialize(format="ds9"))
+    #with open("three_pts.reg", "w") as f:
+    #    f.writelines(outlines)
