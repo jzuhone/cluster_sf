@@ -5,27 +5,17 @@ from astropy.table import Table
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-p = Path("three_pts")
+prefix = "three_pts"
 
-mach = 0.4
+p = Path.cwd()
+fns = list(p.glob(f"SF_lmax*{prefix}.dat"))
 
 sf_mean = []
 sf_min = []
 sf_mid = []
 sf_max = []
-for l_min in [1, 50]:
-    for i, l_max in enumerate([100, 300, 500, 1000]):
-        t = Table.read(
-            p / f"SF_lmax_{l_max}_lmin_{l_min}_M{mach}.dat", format="ascii.commented_header"
-        )
-        sf_mean.append(t["SF"].data)
-        sf_min.append(t["SF_min"].data)
-        sf_mid.append(t["SF_sig"].data)
-        sf_max.append(t["SF_max"].data)
-for i, l_max in enumerate([100, 300, 500, 1000]):
-    t = Table.read(
-        p / f"SF_lmax_{l_max}_lmin_1_M{mach}_a5.0.dat", format="ascii.commented_header"
-    )
+for fn in fns:
+    t = Table.read(fn, format="ascii.commented_header")
     sf_mean.append(t["SF"].data)
     sf_min.append(t["SF_min"].data)
     sf_mid.append(t["SF_sig"].data)
@@ -51,34 +41,32 @@ min_line = lfit(line_min, sf_mean, sf_min)
 max_line = lfit(line_max, sf_mean, sf_max)
 mid_line = lfit(line_max, sf_mean, sf_mid)
 
-
 fig, ax = plt.subplots()
-for l_min in [1,50]:
-    for i, l_max in enumerate([100, 300, 500, 1000]):
-        t = Table.read(
-            p / f"SF_lmax_{l_max}_lmin_{l_min}_M{mach}.dat", format="ascii.commented_header"
-        )
-        ax.plot(t["SF"], t["SF_min"], 'x', color="C0")
-        ax.plot(t["SF"], t["SF_max"], 'x', color="C1")
-        ax.plot(t["SF"], t["SF_sig"], 'x', color="C2")
-for i, l_max in enumerate([100, 300, 500, 1000]):
-    t = Table.read(
-        p / f"SF_lmax_{l_max}_lmin_1_M{mach}_a5.0.dat", format="ascii.commented_header"
-    )
+for fn in fns:
+    t = Table.read(fn, format="ascii.commented_header")
     ax.plot(t["SF"], t["SF_min"], 'x', color="C0")
     ax.plot(t["SF"], t["SF_max"], 'x', color="C1")
     ax.plot(t["SF"], t["SF_sig"], 'x', color="C2")
-for i, l_max in enumerate([1000]):
-    t = Table.read(
-        p / f"SF_lmax_{l_max}_lmin_1_M0.55_a8.0.dat", format="ascii.commented_header"
-    )
-    ax.plot(t["SF"], t["SF_min"], 'x', color="C0")
-    ax.plot(t["SF"], t["SF_max"], 'x', color="C1")
-    ax.plot(t["SF"], t["SF_sig"], 'x', color="C2")
-
 ax.plot(sf_mean, min_line(sf_mean), color="C0")
 ax.plot(sf_mean, max_line(sf_mean), color="C1")
 ax.plot(sf_mean, mid_line(sf_mean), color="C2")
 ax.set_xscale("log")
 ax.set_yscale("log")
 
+def min_line0(x):
+    return 0.44256785 * (x / 1.83324546) ** 1.11136842
+
+
+def mid_line0(x):
+    return 0.38639482 * (x / 1.83344618) ** 1.18724518
+
+
+def max_line0(x):
+    return 0.35638803 * (x / 1.73599161) ** 1.23588083
+
+ax.plot(sf_mean, min_line0(sf_mean), ls='--', color="C0")
+ax.plot(sf_mean, max_line0(sf_mean), ls='--',  color="C1")
+ax.plot(sf_mean, mid_line0(sf_mean), ls='--',  color="C2")
+
+
+fig.savefig("fits.png")

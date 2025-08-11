@@ -2,8 +2,7 @@ import numpy as np
 
 from scipy.integrate import quad, quad_vec, dblquad
 from scipy.special import jv
-from utils import sigma_xrism, pixel_width
-from constants import c_s
+from constants import c_s, sigma_xrism, pixel_width
 from numba import njit
 
 kmin = 0.0
