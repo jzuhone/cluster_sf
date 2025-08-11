@@ -5,7 +5,7 @@ from tqdm.auto import tqdm
 import h5py
 from astropy import wcs
 from astropy.constants import m_p
-from constants import angular_scale
+from cluster_sf.constants import angular_scale
 
 
 def make_wcs(Lx, nx):

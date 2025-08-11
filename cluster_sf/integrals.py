@@ -2,7 +2,7 @@ import numpy as np
 
 from scipy.integrate import quad, quad_vec, dblquad
 from scipy.special import jv
-from constants import c_s, sigma_xrism, pixel_width
+from cluster_sf.constants import c_s, sigma_xrism, pixel_width
 from numba import njit
 
 kmin = 0.0

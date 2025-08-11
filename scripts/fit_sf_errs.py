@@ -53,20 +53,5 @@ ax.plot(sf_mean, mid_line(sf_mean), color="C2")
 ax.set_xscale("log")
 ax.set_yscale("log")
 
-def min_line0(x):
-    return 0.44256785 * (x / 1.83324546) ** 1.11136842
-
-
-def mid_line0(x):
-    return 0.38639482 * (x / 1.83344618) ** 1.18724518
-
-
-def max_line0(x):
-    return 0.35638803 * (x / 1.73599161) ** 1.23588083
-
-ax.plot(sf_mean, min_line0(sf_mean), ls='--', color="C0")
-ax.plot(sf_mean, max_line0(sf_mean), ls='--',  color="C1")
-ax.plot(sf_mean, mid_line0(sf_mean), ls='--',  color="C2")
-
 
 fig.savefig("fits.png")
