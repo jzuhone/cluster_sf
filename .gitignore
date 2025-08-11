@@ -1,2 +1,5 @@
 .idea
 __pycache__
+*~
+cluster_sf.egg-info
+build
