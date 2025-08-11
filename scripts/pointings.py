@@ -1,5 +1,5 @@
 from astropy.coordinates import SkyCoord
-from regions import RectangleSkyRegion, Regions 
+from regions import RectangleSkyRegion, Regions
 from cluster_sf.constants import resolve_width, angular_scale
 import astropy.units as u
 import numpy as np
@@ -66,4 +66,3 @@ if __name__ == "__main__":
     regs2.write("two_pts.reg", format="ds9", overwrite=True)
     regs3 = Regions([reg_c1, reg_c2, reg_c3, reg_c4, reg_s, reg_n])
     regs3.write("three_pts.reg", format="ds9", overwrite=True)
-    

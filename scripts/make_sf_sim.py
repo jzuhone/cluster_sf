@@ -1,7 +1,7 @@
 from astropy.convolution import convolve, Gaussian2DKernel
 import numpy as np
 import h5py
-import unyt as u
+import astropy.units as u
 from cluster_sf.constants import sigma_xrism
 from cluster_sf.bins import make_bins
 from cluster_sf.utils import (

@@ -19,7 +19,6 @@ l_max0 = 1.0
 alpha0 = -11.0 / 3.0
 
 
-
 @njit
 def P3D(k, C, l_dis, l_inj, alpha, n):
     ret = C * (1.0 + (k * l_inj) ** 2) ** (0.5 * alpha) * np.exp(-((k * l_dis) ** n))
