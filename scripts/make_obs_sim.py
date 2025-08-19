@@ -20,6 +20,8 @@ parser.add_argument("l_min", type=int)
 parser.add_argument("mach", type=float)
 parser.add_argument("--alpha", type=float)
 parser.add_argument("--edgesfile", type=str)
+parser.add_argument("--noerr", action="store_true")
+parser.add_argument("--nopsf", action="store_true")
 
 args = parser.parse_args()
 
@@ -35,8 +37,8 @@ edgesfile = args.edgesfile
 
 regfile = f"{prefix}.reg"
 
-convolve_it = True
-stat_err = True
+convolve_it = not args.nopsf
+stat_err = not args.noerr
 
 stat_str = "" if stat_err else "_noerr"
 
@@ -80,13 +82,17 @@ if convolve_it:
 EMr = [reg_m.cutout(EM_proj).sum() for reg_m in reg_masks]
 
 if stat_err:
-    errs = np.random.normal(scale=42.72, size=(npts, 1500))
+    mu_errs = np.random.normal(scale=42.72, size=(npts, 1500))
+    sig_errs = np.random.normal(scale=30.0, size=(npts, 1500))
+    sig_errs[0, :] = np.random.normal(scale=12.0, size=1500)
 else:
-    errs = np.zeros(npts)
+    mu_errs = np.zeros((npts, 1500))
+    sig_errs = np.zeros((npts, 1500))
 
 
-def make_sf(l_max, mach):
+def make_obs(l_max, mach):
     shifts = defaultdict(list)
+    sigmas = defaultdict(list)
     mratio = mach / 0.4
     SF_bins = [[] for _ in range(nbins)]
     k = 0
@@ -97,15 +103,33 @@ def make_sf(l_max, mach):
             for ax in "xyz":
                 m = (f[f"f{ax}"][()] * u.kpc / u.Myr).to_value("km/s")
                 m *= mratio
+                v = (f[f"f2{ax}"][()] * (u.kpc / u.Myr) ** 2).to_value("km**2/s**2")
+                v *= mratio * mratio
                 mEM = m * EM_proj
+                vEM = v * EM_proj
                 if convolve_it:
                     mEM = convolve(mEM, kernel)
-                mus = [
-                    reg_m.cutout(mEM).sum() / emr + err[k]
-                    for err, reg_m, emr in zip(errs, reg_masks, EMr)
-                ]
-                for i, mu in enumerate(mus):
-                    shifts[i].append(mu)
+                    vEM = convolve(vEM, kernel)
+                mus = np.array(
+                    [
+                        reg_m.cutout(mEM).sum() / emr
+                        for reg_m, emr in zip(reg_masks, EMr)
+                    ]
+                )
+                sigs = np.array(
+                    [
+                        reg_m.cutout(vEM).sum() / emr
+                        for reg_m, emr in zip(reg_masks, EMr)
+                    ]
+                )
+                sigs -= mus * mus
+                sigs = np.sqrt(sigs)
+                for j, (mu_err, sig_err) in enumerate(zip(mu_errs, sig_errs)):
+                    mus[j] += mu_err[k]
+                    sigs[j] += sig_err[k]
+                for j, mu in enumerate(mus):
+                    shifts[j].append(mu)
+                    sigmas[j].append(sigs[j])
                 for j in range(nbins):
                     bidxs = list(bin_idxs.values())[j]
                     SF_bins[j].append(
@@ -124,11 +148,28 @@ def make_sf(l_max, mach):
     for k in range(nbins):
         bins_slo.append(np.sum(d[k, idxs_lo[k]] ** 2) / (idxs_lo[k].sum() - 1.0))
         bins_shi.append(np.sum(d[k, idxs_hi[k]] ** 2) / (idxs_hi[k].sum() - 1.0))
-    return SF_bins, bin_means, bin_sigs, np.sqrt(bins_slo), np.sqrt(bins_shi), shifts
+    return SF_bins, bin_means, bin_sigs, np.sqrt(bins_slo), np.sqrt(bins_shi), shifts, sigmas
 
 
-for l_max in [1000]:
-    SF_bins, bin_means, bin_sigs, bins_slo, bins_shi, shifts = make_sf(l_max, mach)
+for l_max in [100, 300, 500, 1000]:
+    SF_bins, bin_means, bin_sigs, bins_slo, bins_shi, shifts, sigmas = make_obs(l_max, mach)
+
+    shifts = np.array([v for v in shifts.values()]).T
+    sigmas = np.array([v for v in sigmas.values()]).T
+
+    t = Table(shifts)
+    t.write(
+        f"shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        format="ascii.commented_header",
+        overwrite=True,
+    )
+
+    t = Table(sigmas)
+    t.write(
+        f"sigmas_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        format="ascii.commented_header",
+        overwrite=True,
+    )
 
     data = {
         "r": np.array([np.mean(bin) for bin in bins.values()]),
@@ -153,9 +194,28 @@ for l_max in [1000]:
         overwrite=True,
     )
 
-    t = Table(shifts)
+    sig_avg = np.mean(sigmas, axis=0)
+    d = sigmas - sig_avg
+    idxs_lo = d < 0
+    idxs_hi = ~idxs_lo
+    sig_min = []
+    sig_max = []
+    for k in range(npts):
+        sig_min.append(np.sqrt(np.sum(d[idxs_lo[:,k]] ** 2) / (idxs_lo[:,k].sum() - 1.0)))
+        sig_max.append(np.sqrt(np.sum(d[idxs_hi[:,k]] ** 2) / (idxs_hi[:,k].sum() - 1.0)))
+    sig_std = np.std(sigmas, axis=0)
+
+    data = {
+        "sigma_avg": sig_avg,
+        "sigma_min": sig_min,
+        "sigma_max": sig_max,
+        "sigma_std": sig_std,
+    }
+
+    t = Table(data)
+
     t.write(
-        f"shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        f"sig_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
