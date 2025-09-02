@@ -1,124 +1,72 @@
-from scipy.integrate import quad, quad_vec
 import numpy as np
 from collections import defaultdict
-import matplotlib.pyplot as plt
-from scipy.special import jv
-from scipy.optimize import minimize, least_squares
-from utils import sigma_xrism, pixel_width, compute_sigma, angular_scale
+from scipy.optimize import least_squares
+from cluster_sf.constants import angular_scale, sf_stat_err, alpha0, l_min0
 from astropy.table import Table
-import unyt as u
-from observed_utils import *
-from astropy.table import Table
-from tqdm.auto import tqdm
-import json
-import sys
-from IPython import embed
+from cluster_sf.integrals import getC, SF, sigma
 import argparse
 from mpi4py import MPI
 from tqdm.auto import tqdm
 
+
 n = 2
 
 
-def min_line(x):
-    return 0.44256785 * (x / 1.83324546) ** 1.11136842
+def modify_params(params, l_inj_ini, fixed):
+    p = params.copy()
+    ret_p = [p[0]]
+    n_fixed = sum(fixed)
+    if n_fixed == 2:
+        if fixed[0]:
+            ret_p += [l_min0, l_inj_ini, params[1]]
+        else:
+            ret_p += [params[1], l_inj_ini, alpha0]
+    else:
+        if fixed[0]:
+            ret_p += [l_min0, params[1], params[2]]
+        else:
+            ret_p += [params[1], params[2], alpha0]
+    return ret_p        
+    
 
+def make_nll(sf_err_mods, sig_err_mods, l_inj_ini, fixed, no_sig, R):
+    
+    def _nll(params, x, y, y2):
+        mach, l_dis, l_inj, alpha = modify_params(params, l_inj_ini, fixed)
+        Cn = getC(mach, l_dis, l_inj, alpha, n)
+        y_model1 = SF(x, Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)
+        y_model1 += 2.0 * sf_stat_err**2
+        y_model2 = np.sqrt(sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n))
+        dy = y - y_model1
+        dy2 = y2 - y_model2
+        dy_neg = np.float64(dy > 0.0)
+        dy2_neg = np.float64(dy2 > 0.0)
+        sig = sf_err_mods[0](y_model1) * dy_neg + (1.0 - dy_neg) * sf_err_mods[1](y_model1))
+        sig2 = sig_err_mods[0](l_inj, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_mods[1](l_inj, alpha)
+        ret = dy / sig
+        if not no_sig:
+            ret = np.concatenate([ret, dy2 / sig2])
+        return ret
 
-def mid_line(x):
-    return 0.38639482 * (x / 1.83344618) ** 1.18724518
-
-
-def max_line(x):
-    return 0.35638803 * (x / 1.73599161) ** 1.23588083
-
-
-def nll(params, res, x, y, y2, no_sig, l_inj_ini):
-    if res in [1, 2]:
-        mach, l_inj, alpha = params.copy()
-        l_dis = l_min0
-    elif res in [3, 4]:
-        mach, l_inj = params.copy()
-        alpha = alpha0
-        l_dis = l_min0
-    elif res in [5, 6, 14]:
-        mach, l_inj = params.copy()
-        l_dis = l_min0
-        alpha = alpha0
-    elif res in [7, 8]:
-        mach, alpha = params.copy()
-        l_dis = l_min0
-        l_inj = l_inj_ini
-    elif res in [9, 10]:
-        mach, l_dis = params.copy()
-        l_inj = l_inj_ini
-        alpha = alpha0
-    elif res in [11, 12, 13]:
-        mach = params.copy()[0]
-        l_inj = l_inj_ini
-        alpha = alpha0
-        l_dis = l_min0
-    Cn = getC(mach, l_dis, l_inj, alpha, n)
-    y_model1 = SF(x, Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)
-    y_model1 += 2.0 * sf_stat_err**2
-    y_model2 = np.sqrt(sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n))
-    dy = y - y_model1
-    dy2 = y2 - np.array([y_model2] * 2)
-    dy_neg = np.float64(dy > 0.0)
-    # sig = y_min * dy_neg + (1.0 - dy_neg) * y_max
-    sig = max_line(y_model1) * dy_neg + (1.0 - dy_neg) * min_line(y_model1)
-    cv2 = sig_var(Cn, l_dis, l_inj, alpha, n) ** 0.5
-    sig2 = np.array([np.sqrt(cv2 + 900)] * 2)
-    # print(sig2)
-    # sig = y_mid
-    # print(dy**2, sig**2, dy2**2, y2, y_model2, y2err**2)
-    # ret1 = np.sum(np.log(2.0 * np.pi * sig**2) + dy**2 / sig**2)
-    # ret1 = np.sum(dy**2 / sig**2)
-    ret = dy / sig
-    # print(y2err)
-    # print(dy2**2, y2err**2)
-    if not no_sig:
-        ret = np.concatenate([ret, dy2 / sig2])
-    # print(dy / sig, dy2/y2err)
-    # print(ret, np.sum(ret**2))
-    # else:
-    #    ret2 = 0.0
-    # ret = ret1 + ret2
-    # print(ret, ret1, ret2)  # , y_model1, y, sig)
-    # print(ret)
-    # print(y, y_model1, dy, sig)
-    return ret
-
+    return _nll
 
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("res", type=int)
     parser.add_argument("l_inj", type=float)
     parser.add_argument("--added", action="store_true")
     parser.add_argument("--no_sig", action="store_true")
 
     args = parser.parse_args()
 
-    # res = int(sys.argv[1])
     l_inj_ini = args.l_inj
-    res = args.res
-
     no_sig = args.no_sig
+    added = args.added
 
-    """
-    bounds = {
-        "mach": [0.05, 2.0],
-        "l_inj": [0.2, 10.0],
-        "l_dis": [0.5e-3, 2.0],
-        "alpha": [-8.0, -2.5],
-    }
-    """
     mach_min, mach_max = 0.05, 2.0
     l_inj_min, l_inj_max = 0.1, 5.0
     l_dis_min, l_dis_max = 0.5e-3, 0.3
     alpha_min, alpha_max = -8.0, -2.5
-
-    np3 = 1
 
     if res in [1, 2]:
         initial = np.array([0.3, l_inj_ini, alpha0])
@@ -147,11 +95,7 @@ def main():
         initial = np.array([0.3])
         bounds = ([mach_min], [mach_max])
         np2 = 1
-    if res in [2, 4, 6, 8, 10, 12, 13, 14]:
-        added = True
-    else:
-        added = False
-
+    fixed = [b1 == b2 for b1, b2 in zip(bounds[0], bounds[1])]
     np1 = 200
     p1_bins = np.linspace(bounds[0][0], bounds[1][0], np1 + 1)
     p1_mid = 0.5 * (p1_bins[1:] + p1_bins[:-1])
@@ -174,17 +118,9 @@ def main():
 
     added_str = "_added" if added else ""
     t = Table.read(f"SF_observed{added_str}.dat", format="ascii.commented_header")
-    # t = Table.read("SF_lmax_500_lmin_1_M0.4.dat", format="ascii.commented_header")
     sigma1, sigma2 = 200.0, 200.0
-    # sigma1, sigma2 = 334.0, 340.0
-    sigma_std = np.sqrt(60.0**2 + sigma_stat_err**2)
     x = t["r"].data * angular_scale.value
-    y = t["SF"].data  # - 2.0 * sf_stat_err**2
-    # y_min = min_line(t["SF"].data)
-    # y_mid = mid_line(t["SF"].data)
-    # y_max = max_line(t["SF"].data)
-    # y2 = np.array([sigma1 * sigma1, sigma2 * sigma2])
-    # y2err = 2.0 * np.sqrt(y2) * sigma_std
+    y = t["SF"].data
     y2 = np.array([sigma1, sigma2])
 
     def get_results(y_sf, y_sig, params):
@@ -192,7 +128,7 @@ def main():
             nll,
             initial,
             bounds=bounds,
-            args=(res, x, y_sf, y_sig, no_sig, l_inj_ini),
+            args=(x, y_sf, y_sig, no_sig, l_inj_ini),
         )
         if res in [1, 2]:
             mach, l_inj, alpha = result.x
@@ -248,7 +184,6 @@ def main():
         p = None
     p = comm.bcast(p, root=0)
 
-    """
     loop_range = range(np1)
 
     # Divide the workload among processes
@@ -348,7 +283,6 @@ def main():
             format="ascii.commented_header",
             overwrite=True,
         )
-    """
 
 
 if __name__ == "__main__":
