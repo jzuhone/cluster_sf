@@ -27,27 +27,6 @@ def P2D_int(k_z, k, C, l_dis, l_inj, alpha, n, R):
     return eps(k_z, R) ** 2 * P3D(kk, C, l_dis, l_inj, alpha, n)
 
 
-@njit
-def sig_var_int(k1, k2, C, l_dis, l_inj, alpha, n, R):
-    P1 = P3D(k1, C, l_dis, l_inj, alpha, n)
-    P2 = P3D(k2, C, l_dis, l_inj, alpha, n)
-    epsp = eps(k1 + k2, R)
-    epsm = eps(k1, R) * eps(k2, R)
-    return 2.0 * P1 * P2 * (epsp - epsm) ** 2
-
-
-def sig_var(C, l_dis, l_inj, alpha, n, R):
-    return dblquad(
-        sig_var_int,
-        kmin,
-        kmax,
-        kmin,
-        kmax,
-        args=(C, l_dis, l_inj, alpha, n, R),
-        epsrel=1.0e-5,
-    )[0]
-
-
 def P2D(k, C, l_dis, l_inj, alpha, n, R):
     return (
         2.0
@@ -79,26 +58,6 @@ def getC(mach, l_dis, l_inj, alpha, n=2):
     return Cn
 
 
-def v_z(k, mach, l_dis, l_inj, alpha, n=2):
-    C = getC(mach, l_dis, l_inj, alpha, n=n)
-    return np.sqrt(4.0 * np.pi * P3D(k, C, l_dis, l_inj, alpha, n) * k**3)
-
-
-def SF_int(k, r, C, l_dis, l_inj, alpha, n, R):
-    Pg = (
-        np.exp(-4.0 * np.pi**2 * k * k * sigma_xrism**2) * np.sinc(pixel_width * k) ** 2
-    )
-    ret = (
-        4.0
-        * np.pi
-        * (1.0 - jv(0, 2.0 * np.pi * k * r))
-        * P2D(k, C, l_dis, l_inj, alpha, n, R)
-        * k
-        * Pg
-    )
-    return ret
-
-
 def sigma_int(k, C, l_dis, l_inj, alpha, n, R):
     # Pg = (
     #    np.exp(-4.0 * np.pi**2 * k * k * sigma_xrism**2) * np.sinc(pixel_width * k) ** 2
@@ -127,6 +86,21 @@ def sigma(Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0):
     return int1 - int2
 
 
+def SF_int(k, r, C, l_dis, l_inj, alpha, n, R):
+    Pg = (
+        np.exp(-4.0 * np.pi**2 * k * k * sigma_xrism**2) * np.sinc(pixel_width * k) ** 2
+    )
+    ret = (
+        4.0
+        * np.pi
+        * (1.0 - jv(0, 2.0 * np.pi * k * r))
+        * P2D(k, C, l_dis, l_inj, alpha, n, R)
+        * k
+        * Pg
+    )
+    return ret
+
+
 def SF(x, Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0):
     int_upper = np.array(
         [
@@ -145,3 +119,8 @@ def SF(x, Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0):
 
 
 r = np.linspace(30e-3, 2.0, 100)
+
+
+def v_z(k, mach, l_dis, l_inj, alpha, n=2):
+    C = getC(mach, l_dis, l_inj, alpha, n=n)
+    return np.sqrt(4.0 * np.pi * P3D(k, C, l_dis, l_inj, alpha, n) * k**3)
