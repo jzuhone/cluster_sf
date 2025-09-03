@@ -36,10 +36,30 @@ indent-width = 4
 target-version = "py39"
 
 [lint]
-# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`) codes by default.
-# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
-# McCabe complexity (`C901`) by default.
-select = ["E4", "E7", "E9", "F"]
+# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`) codes 
+# by default, and isort-like import sorting. Unlike Flake8, Ruff 
+# doesn't enable pycodestyle warnings (`W`) or McCabe complexity 
+# (`C901`) by default.
+select = ["E4", "E7", "E9", "F", "I"]
+select = [
+    "E",
+    "F",
+    "W",
+    "C4",   # flake8-comprehensions
+    "B",    # flake8-bugbear
+    "G",    # flake8-logging-format
+    "TCH",  # flake8-type-checking
+    "YTT",  # flake8-2020
+    "UP",   # pyupgrade
+    "I",    # isort
+    "NPY",  # numpy specific rules
+    "RUF031"# incorrectly-parenthesized-tuple-in-subscript
+]
+ignore = [
+    "E741",  # Do not use variables named 'I', 'O', or 'l'
+    "UP038", # non-pep604-isinstance
+]
+
 ignore = []
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
@@ -48,6 +68,18 @@ unfixable = []
 
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.isort]
+# Group imports like isort
+known-first-party = ["cluster_sf"]
+known-third-party = ["numpy", "astropy", "scipy", "matplotlib"]
+lines-between-types = 1
+combine-as-imports = true
+force-sort-within-sections = true
+force-single-line = false
+multi-line-output = 3
+include-trailing-comma = true
+
 
 [format]
 # Like Black, use double quotes for strings.

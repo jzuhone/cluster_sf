@@ -5,6 +5,7 @@ from astropy.table import Table
 from pathlib import Path
 from argparse import ArgumentParser
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 
 @custom_model
@@ -53,18 +54,15 @@ parser = ArgumentParser()
 parser.add_argument("prefix", type=str)
 args = parser.parse_args()
 
-
 p = Path.cwd()
 fns = list(p.glob(f"sig_lmax*noerr_{args.prefix}.dat"))
-
-print(len(fns))
 
 sig_min = defaultdict(list)
 sig_max = defaultdict(list)
 lmax = []
 alpha = []
 for i, fn in enumerate(fns):
-    if "lmin_50" in fn.name:
+    if "lmin_50" in fn.name or "noerr" not in fn.name:
         continue
     words = fn.name.split("_")
     lmax.append(float(words[2]))
@@ -80,42 +78,42 @@ for key in sig_min:
     sig_min[key] = np.array(sig_min[key])
     sig_max[key] = np.array(sig_max[key])
 
-lfit = TRFLSQFitter()
-for key in sig_min:
-    err_model_min = make_err_model()
-    err_model_max = make_err_model()
-    err_sheet_min = lfit(err_model_min, lmax, alpha, sig_min[key])
-    err_sheet_max = lfit(err_model_max, lmax, alpha, sig_max[key])
-    pmin = {
-        k: np.atleast_1d(v)
-        for k, v in zip(err_sheet_min.param_names, err_sheet_min.parameters)
-    }
-    pmax = {
-        k: np.atleast_1d(v)
-        for k, v in zip(err_sheet_max.param_names, err_sheet_max.parameters)
-    }
-    print(key, pmin)
-    print(key, pmax)
-    tmin = Table(pmin)
-    tmax = Table(pmax)
-    tmin.write(
-        f"{args.prefix}_sig_err_fit_params_min_{key}.dat",
-        format="ascii.commented_header",
-        overwrite=True,
-    )
-    tmax.write(
-        f"{args.prefix}_sig_err_fit_params_max_{key}.dat",
-        format="ascii.commented_header",
-        overwrite=True,
-    )
+min_models = defaultdict(list)
+max_models = defaultdict(list)
 
-"""
 lmax_grid, alpha_grid = np.meshgrid(
     np.linspace(lmax.min(), lmax.max(), 100), np.linspace(alpha.min(), alpha.max(), 100)
 )
 
-fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-ax.scatter(lmax, alpha, sig_max[0])
-ax.plot_surface(lmax_grid, alpha_grid, err_sheet(lmax_grid, alpha_grid), alpha=0.5)
+lfit = TRFLSQFitter()
+fig, axes = plt.subplots(ncols=len(sig_min), subplot_kw={"projection": "3d"})
+for i, key in enumerate(sig_min):
+    err_model_min = make_err_model()
+    err_model_max = make_err_model()
+    err_sheet_min = lfit(err_model_min, lmax, alpha, sig_min[key])
+    err_sheet_max = lfit(err_model_max, lmax, alpha, sig_max[key])
+    min_models["bin"].append(key)
+    max_models["bin"].append(key)
+    for k, v in zip(err_sheet_min.param_names, err_sheet_min.parameters):
+        min_models[k].append(v)
+    for k, v in zip(err_sheet_max.param_names, err_sheet_max.parameters):
+        max_models[k].append(v)
+    axes[i].scatter(lmax, alpha, sig_min[key], color="C0")
+    axes[i].scatter(lmax, alpha, sig_max[key], color="C1")
+    axes[i].plot_surface(lmax_grid, alpha_grid, err_sheet_min(lmax_grid, alpha_grid), alpha=0.5, color="C0")
+    axes[i].plot_surface(lmax_grid, alpha_grid, err_sheet_max(lmax_grid, alpha_grid), alpha=0.5, color="C1")
+
 plt.show()
-"""
+
+tmin = Table(min_models)
+tmax = Table(max_models)
+tmin.write(
+    f"{args.prefix}_sig_err_fit_params_min.dat",
+    format="ascii.commented_header",
+    overwrite=True,
+)
+tmax.write(
+    f"{args.prefix}_sig_err_fit_params_max.dat",
+    format="ascii.commented_header",
+    overwrite=True,
+)
