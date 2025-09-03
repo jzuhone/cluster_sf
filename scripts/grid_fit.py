@@ -64,12 +64,12 @@ def modify_params(params, l_inj_ini, free_params):
     return [p[0], l_dis, l_inj, alpha]      
     
 
-def make_nll(sf_err_fns, sig_err_fns, l_inj_ini, free_params, no_sig):
+def make_nll(prefix, l_inj_ini, free_params, no_sig):
     
-    sf_err_min = make_sf_err_func(sf_err_fns[0])
-    sf_err_max = make_sf_err_func(sf_err_fns[1])
-    sig_err_min = make_sig_err_func(sig_err_fns[0])
-    sig_err_max = make_sig_err_func(sig_err_fns[1])
+    sf_err_min = make_sf_err_func(f"{prefix}_sf_err_fit_params_min.dat")
+    sf_err_max = make_sf_err_func(f"{prefix}_sf_err_fit_params_max.dat")
+    sig_err_min = make_sig_err_func(f"{prefix}_sig_err_fit_params_min.dat")
+    sig_err_max = make_sig_err_func(f"{prefix}_sig_err_fit_params_max.dat")
 
     def _comp_models(params, x, y1, y2):
         mach, l_inj, l_dis, alpha = modify_params(params, l_inj_ini, free_params)
@@ -153,7 +153,7 @@ def main():
     t2 = Table.read("sigma_observed.dat", format="ascii.commented_header")
     y2 = t2["sigma"].data
 
-    nll, comp_models = make_nll(sf_err_fns, sig_err_fns, l_inj_ini, free_params, no_sig)
+    nll, comp_models = make_nll(prefix, l_inj_ini, free_params, no_sig)
     
     def get_results(result_out, params, y_sf, y_sig):
         p_out, y_model1, sig1, y_model2, sig2 = comp_models(result_out, x, y_sf, y_sig)
