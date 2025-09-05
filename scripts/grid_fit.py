@@ -15,8 +15,8 @@ n = 2
 def make_sf_err_func(fn):
     t = Table.read(fn, format="ascii.commented_header")
     A = t["amplitude"].data
-    x0 = t["x0"].data
-    alpha = t["alpha"].data
+    x0 = t["x_0"].data
+    alpha = -t["alpha"].data
     def _sf_err_func(y):
         return A*(y / x0)**alpha
     return _sf_err_func
@@ -26,8 +26,8 @@ def make_sig_err_func(fn):
     t = Table.read(fn, format="ascii.commented_header")
     A = t["A"].data
     x0 = t["x0"].data
-    x1 = t["y0"].data
-    y0 = t["x1"].data
+    x1 = t["x1"].data
+    y0 = t["y0"].data
     y1 = t["y1"].data
     alpha = t["alpha"].data
     beta = t["beta"].data
@@ -61,7 +61,7 @@ def modify_params(params, l_inj_ini, free_params):
         alpha = p[i_free]
     else:
         alpha = alpha0
-    return [p[0], l_dis, l_inj, alpha]      
+    return [p[0], l_inj, l_dis, alpha]
     
 
 def make_nll(prefix, l_inj_ini, free_params, no_sig):
@@ -72,16 +72,20 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
     sig_err_max = make_sig_err_func(f"{prefix}_sig_err_fit_params_max.dat")
 
     def _comp_models(params, x, y1, y2):
+        print(y1, sf_err_min(y1))
         mach, l_inj, l_dis, alpha = modify_params(params, l_inj_ini, free_params)
         p_out = np.array([mach, l_inj, l_dis, alpha])
         Cn = getC(mach, l_dis, l_inj, alpha, n)
         y_model1 = SF(x, Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)
         y_model1 += 2.0 * sf_stat_err**2
         y_model2 = np.sqrt(sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n))
+        #print(y1, y_model1)
+        #print(y_model1, y_model2, sf_stat_err**2)
         dy1_neg = np.float64(y1 - y_model1 > 0.0)
         dy2_neg = np.float64(y2 - y_model2 > 0.0)
         sig1 = sf_err_max(y_model1) * dy1_neg + (1.0 - dy1_neg) * sf_err_min(y_model1)
-        sig2 = sig_err_max(l_inj, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_min(l_inj, alpha)
+        sig2 = y_model2*(sig_err_max(l_inj, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_min(l_inj, alpha))
+        #print(sig1, sig2)
         return p_out, y_model1, sig1, y_model2, sig2
     
     def _nll(params, x, y1, y2, cm_func):
@@ -122,6 +126,9 @@ def main():
     }
 
     initial = np.array([init_dict[p] for p in free_params])
+
+    lsq_bounds = ([bounds[p][0] for p in free_params],
+                  [bounds[p][1] for p in free_params])
 
     np1 = 200
     p1_bins = np.linspace(bounds["mach"][0], bounds["mach"][1], np1 + 1)
@@ -173,8 +180,8 @@ def main():
         result = least_squares(
             nll,
             initial,
-            bounds=bounds,
-            args=(x, y1, y2, no_sig, comp_models),
+            bounds=lsq_bounds,
+            args=(x, y1, y2, comp_models),
         )
         get_results(result.x, p, y1, y2)
         print(free_params, p)
@@ -182,6 +189,7 @@ def main():
         p = None
     p = comm.bcast(p, root=0)
 
+    """
     loop_range = range(np1)
 
     # Divide the workload among processes
@@ -214,7 +222,7 @@ def main():
             format="ascii.commented_header",
             overwrite=True,
         )
-
+    """
 
 if __name__ == "__main__":
     main()
