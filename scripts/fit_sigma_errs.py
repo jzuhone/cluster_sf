@@ -55,14 +55,14 @@ parser.add_argument("prefix", type=str)
 args = parser.parse_args()
 
 p = Path.cwd()
-fns = list(p.glob(f"sig_lmax*noerr_{args.prefix}.dat"))
+fns = list(p.glob(f"sig_lmax*noerr*_{args.prefix}.dat"))
 
 sig_min = defaultdict(list)
 sig_max = defaultdict(list)
 lmax = []
 alpha = []
 for i, fn in enumerate(fns):
-    if "lmin_50" in fn.name or "noerr" not in fn.name:
+    if "lmin_50" in fn.name:
         continue
     words = fn.name.split("_")
     lmax.append(float(words[2]))
