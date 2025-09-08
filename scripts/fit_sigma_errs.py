@@ -103,7 +103,7 @@ for i, key in enumerate(sig_min):
     axes[i].plot_surface(lmax_grid, alpha_grid, err_sheet_min(lmax_grid, alpha_grid), alpha=0.5, color="C0")
     axes[i].plot_surface(lmax_grid, alpha_grid, err_sheet_max(lmax_grid, alpha_grid), alpha=0.5, color="C1")
 
-plt.show()
+#plt.show()
 
 tmin = Table(min_models)
 tmax = Table(max_models)

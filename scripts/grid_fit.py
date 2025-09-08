@@ -3,11 +3,12 @@ from collections import defaultdict
 from scipy.optimize import least_squares
 from cluster_sf.constants import angular_scale, sf_stat_err, alpha0, l_min0
 from astropy.table import Table
-from cluster_sf.integrals import getC, SF, sigma
+from cluster_sf.integrals import getC, SF, sigma, sig_var
 import argparse
 from mpi4py import MPI
 from tqdm.auto import tqdm
 
+stat_err_sig = np.array([25.0, 25.0, 25.0, 25.0, 25.0, 39.0])
 
 n = 2
 
@@ -22,7 +23,7 @@ def make_sf_err_func(fn):
     return _sf_err_func
 
 
-def make_sig_err_func(fn):
+def make_sig_err_func(fn, n_pts):
     t = Table.read(fn, format="ascii.commented_header")
     A = t["A"].data
     x0 = t["x0"].data
@@ -40,7 +41,7 @@ def make_sig_err_func(fn):
         x2_factor = (1.0 + (x / x1) ** 2) ** gamma
         y2_factor = (1.0 + (y / y1) ** 2) ** delta
         ret = A * x_factor * y_factor * x2_factor * y2_factor 
-        return ret[idxs]
+        return ret[idxs[:n_pts]]
     return _sig_err_func
 
 
@@ -65,27 +66,31 @@ def modify_params(params, l_inj_ini, free_params):
     
 
 def make_nll(prefix, l_inj_ini, free_params, no_sig):
-    
+
+    if prefix == "three_pts":
+        n_pts = 6
+    elif prefix == "two_pts":
+        n_pts = 4
+
     sf_err_min = make_sf_err_func(f"{prefix}_sf_err_fit_params_min.dat")
     sf_err_max = make_sf_err_func(f"{prefix}_sf_err_fit_params_max.dat")
-    sig_err_min = make_sig_err_func(f"{prefix}_sig_err_fit_params_min.dat")
-    sig_err_max = make_sig_err_func(f"{prefix}_sig_err_fit_params_max.dat")
+    sig_err_min = make_sig_err_func(f"{prefix}_sig_err_fit_params_min.dat", n_pts)
+    sig_err_max = make_sig_err_func(f"{prefix}_sig_err_fit_params_max.dat", n_pts)
 
     def _comp_models(params, x, y1, y2):
-        print(y1, sf_err_min(y1))
         mach, l_inj, l_dis, alpha = modify_params(params, l_inj_ini, free_params)
         p_out = np.array([mach, l_inj, l_dis, alpha])
         Cn = getC(mach, l_dis, l_inj, alpha, n)
         y_model1 = SF(x, Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)
         y_model1 += 2.0 * sf_stat_err**2
-        y_model2 = np.sqrt(sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n))
-        #print(y1, y_model1)
-        #print(y_model1, y_model2, sf_stat_err**2)
+        y_model2 = np.sqrt([sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)]*n_pts)
         dy1_neg = np.float64(y1 - y_model1 > 0.0)
         dy2_neg = np.float64(y2 - y_model2 > 0.0)
         sig1 = sf_err_max(y_model1) * dy1_neg + (1.0 - dy1_neg) * sf_err_min(y_model1)
-        sig2 = y_model2*(sig_err_max(l_inj, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_min(l_inj, alpha))
-        #print(sig1, sig2)
+        #sig2 = sig_err_max(l_inj*1000.0, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_min(l_inj*1000.0, alpha)
+        #sig2 *= y_model2
+        sig2 = sig_var(Cn, l_dis, l_inj, alpha, n, 0.0) ** 0.5
+        sig2 = np.sqrt(sig2+stat_err_sig[:n_pts]**2)
         return p_out, y_model1, sig1, y_model2, sig2
     
     def _nll(params, x, y1, y2, cm_func):
@@ -152,13 +157,19 @@ def main():
     rank = comm.Get_rank()  # Get the rank of the current process
     size = comm.Get_size()  # Get the total number of processes
 
+    if prefix == "three_pts":
+        n_pts = 6
+    elif prefix == "two_pts":
+        n_pts = 4
+        
     added_str = "_added" if added else ""
     sig_str = "_nosig" if no_sig else ""
-    t = Table.read(f"SF_observed{added_str}.dat", format="ascii.commented_header")
+    orig_str = "_orig" if n_pts == 4 else ""
+    t = Table.read(f"SF_observed{orig_str}{added_str}.dat", format="ascii.commented_header")
     x = t["r"].data * angular_scale.value
     y1 = t["SF"].data
     t2 = Table.read("sigma_observed.dat", format="ascii.commented_header")
-    y2 = t2["sigma"].data
+    y2 = t2["sigma"].data[:n_pts]
 
     nll, comp_models = make_nll(prefix, l_inj_ini, free_params, no_sig)
     
@@ -172,9 +183,10 @@ def main():
         params["alpha"].append(p_out[3])
         params["cost"].append(cost1+cost2)
         params["cost_sigma"].append(cost2)
-        params["sigma"].append(y_model2)
-        params["sigma_err"].append(sig2)
-
+        params["sigma"].append(y_model2[0])
+        params["sigma_err1"].append(sig2[0])
+        params["sigma_err2"].append(sig2[-1])
+        
     if rank == 0:
         p = defaultdict(list)
         result = least_squares(
@@ -189,7 +201,6 @@ def main():
         p = None
     p = comm.bcast(p, root=0)
 
-    """
     loop_range = range(np1)
 
     # Divide the workload among processes
@@ -222,7 +233,6 @@ def main():
             format="ascii.commented_header",
             overwrite=True,
         )
-    """
 
 if __name__ == "__main__":
     main()

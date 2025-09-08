@@ -118,6 +118,27 @@ def SF(x, Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0):
     return int_upper
 
 
+@njit
+def sig_var_int(k1, k2, C, l_dis, l_inj, alpha, n, R):
+    P1 = P3D(k1, C, l_dis, l_inj, alpha, n)
+    P2 = P3D(k2, C, l_dis, l_inj, alpha, n)
+    epsp = eps(k1 + k2, R)
+    epsm = eps(k1, R) * eps(k2, R)
+    return 2.0 * P1 * P2 * (epsp - epsm) ** 2
+
+
+def sig_var(C, l_dis, l_inj, alpha, n, R):
+    return dblquad(
+        sig_var_int,
+        kmin,
+        kmax,
+        kmin,
+        kmax,
+        args=(C, l_dis, l_inj, alpha, n, R),
+        epsrel=1.0e-5,
+    )[0]
+
+
 r = np.linspace(30e-3, 2.0, 100)
 
 

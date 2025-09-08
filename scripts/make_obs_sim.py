@@ -83,8 +83,9 @@ EMr = [reg_m.cutout(EM_proj).sum() for reg_m in reg_masks]
 
 if stat_err:
     mu_errs = np.random.normal(scale=42.72, size=(npts, 1500))
-    sig_errs = np.random.normal(scale=30.0, size=(npts, 1500))
-    sig_errs[0, :] = np.random.normal(scale=12.0, size=1500)
+    sig_errs = np.random.normal(scale=25.0, size=(npts, 1500))
+    if npts == 6:
+        sig_errs[5, :] = np.random.normal(scale=39.0, size=1500)
 else:
     mu_errs = np.zeros((npts, 1500))
     sig_errs = np.zeros((npts, 1500))
