@@ -191,10 +191,12 @@ for l_max in [100, 300, 500, 1000]:
 
     t.write(
         f"SF_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
-        format="ascii.commented_header",
+         format="ascii.commented_header",
         overwrite=True,
     )
 
+    print(sigmas.shape)
+    
     sig_avg = np.mean(sigmas, axis=0)
     d = sigmas - sig_avg
     idxs_lo = d < 0
@@ -202,8 +204,8 @@ for l_max in [100, 300, 500, 1000]:
     sig_min = []
     sig_max = []
     for k in range(npts):
-        sig_min.append(np.sqrt(np.sum(d[idxs_lo[:,k]] ** 2) / (idxs_lo[:,k].sum() - 1.0)))
-        sig_max.append(np.sqrt(np.sum(d[idxs_hi[:,k]] ** 2) / (idxs_hi[:,k].sum() - 1.0)))
+        sig_min.append(np.sqrt(np.sum(d[idxs_lo[:,k],k] ** 2) / (idxs_lo[:,k].sum() - 1.0)))
+        sig_max.append(np.sqrt(np.sum(d[idxs_hi[:,k],k] ** 2) / (idxs_hi[:,k].sum() - 1.0)))
     sig_std = np.std(sigmas, axis=0)
 
     data = {
