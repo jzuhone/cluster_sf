@@ -89,7 +89,7 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
         sig1 = sf_err_max(y_model1) * dy1_neg + (1.0 - dy1_neg) * sf_err_min(y_model1)
         sig2 = sig_err_max(l_inj*1000.0, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_min(l_inj*1000.0, alpha)
         sig2 *= y_model2
-        #sig2 = sig_var(Cn, l_dis, l_inj, alpha, n, 0.0) ** 0.5
+        #sig2 = sig_var(Cn, l_dis, l_inj, alpha, n, 0.0) ** 0.25
         sig2 = np.sqrt(sig2*sig2+stat_err_sig[:n_pts]**2)
         return p_out, y_model1, sig1, y_model2, sig2
     
@@ -98,6 +98,7 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
         ret = (y1 - y_model1) / sig1
         if not no_sig:
             ret = np.concatenate([ret, (y2-y_model2) / sig2])
+        print((ret**2).sum())
         return ret
 
     return _nll, _comp_models
@@ -203,7 +204,6 @@ def main():
 
     loop_range = range(np1)
 
-    """
     # Divide the workload among processes
     local_start = rank * len(loop_range) // size
     local_end = (rank + 1) * len(loop_range) // size
@@ -235,6 +235,6 @@ def main():
             overwrite=True,
         )
 
-    """
+
 if __name__ == "__main__":
     main()
