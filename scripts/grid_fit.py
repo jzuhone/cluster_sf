@@ -98,7 +98,7 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
         ret = (y1 - y_model1) / sig1
         if not no_sig:
             ret = np.concatenate([ret, (y2-y_model2) / sig2])
-        print((ret**2).sum())
+        #print((ret**2).sum())
         return ret
 
     return _nll, _comp_models
@@ -135,7 +135,7 @@ def main():
 
     lsq_bounds = ([bounds[p][0] for p in free_params],
                   [bounds[p][1] for p in free_params])
-
+    
     np1 = 200
     p1_bins = np.linspace(bounds["mach"][0], bounds["mach"][1], np1 + 1)
     p1_mid = 0.5 * (p1_bins[1:] + p1_bins[:-1])
@@ -146,7 +146,7 @@ def main():
         p2_mid = 0.5 * (p2_bins[1:] + p2_bins[:-1])
     else:
         p2_mid = None
-
+    
     np3 = 200 if len(free_params) > 2 else 1
     if np3 != 1:
         p3_bins = np.linspace(bounds[free_params[2]][0], bounds[free_params[2]][1], np3 + 1)
@@ -212,11 +212,11 @@ def main():
     lp = defaultdict(list)
 
     for k in tqdm(local_range, desc=f"Process {rank}", position=rank, leave=True):
-        p_in = [p1_mid[k]]
         for j in range(np2):
-            if np2 > 1:
-                p_in.append(p2_mid[j])
             for i in range(np3):
+                p_in = [p1_mid[k]]
+                if np2 > 1:
+                    p_in.append(p2_mid[j])
                 if np3 > 1:
                     p_in.append(p3_mid[i])
                 get_results(p_in, lp, y1, y2)
