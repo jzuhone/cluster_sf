@@ -23,28 +23,6 @@ def make_sf_err_func(fn):
     return _sf_err_func
 
 
-def make_sig_err_func(fn, n_pts):
-    t = Table.read(fn, format="ascii.commented_header")
-    A = t["A"].data
-    x0 = t["x0"].data
-    x1 = t["x1"].data
-    y0 = t["y0"].data
-    y1 = t["y1"].data
-    alpha = t["alpha"].data
-    beta = t["beta"].data
-    gamma = t["gamma"].data
-    delta = t["delta"].data
-    idxs = np.array([0, 0, 0, 0, 1, 1], dtype=int)
-    def _sig_err_func(x, y):
-        x_factor = (1.0 + (x / x0) ** 2) ** alpha
-        y_factor = (1.0 + (y / y0) ** 2) ** beta
-        x2_factor = (1.0 + (x / x1) ** 2) ** gamma
-        y2_factor = (1.0 + (y / y1) ** 2) ** delta
-        ret = A * x_factor * y_factor * x2_factor * y2_factor 
-        return ret[idxs[:n_pts]]
-    return _sig_err_func
-
-
 def modify_params(params, l_inj_ini, free_params):
     p = params.copy()
     i_free = 1
@@ -67,17 +45,11 @@ def modify_params(params, l_inj_ini, free_params):
 
 def make_nll(prefix, l_inj_ini, free_params, no_sig):
 
-    if prefix == "three_pts":
-        n_pts = 6
-    elif prefix == "two_pts":
-        n_pts = 4
-
     sf_err_min = make_sf_err_func(f"{prefix}_sf_err_fit_params_min.dat")
     sf_err_max = make_sf_err_func(f"{prefix}_sf_err_fit_params_max.dat")
-    sig_err_min = make_sig_err_func(f"{prefix}_sig_err_fit_params_min.dat", n_pts)
-    sig_err_max = make_sig_err_func(f"{prefix}_sig_err_fit_params_max.dat", n_pts)
 
     def _comp_models(params, x, y1, y2):
+        n_pts = len(y2)
         mach, l_inj, l_dis, alpha = modify_params(params, l_inj_ini, free_params)
         p_out = np.array([mach, l_inj, l_dis, alpha])
         Cn = getC(mach, l_dis, l_inj, alpha, n)
@@ -85,11 +57,8 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
         y_model1 += 2.0 * sf_stat_err**2
         y_model2 = np.sqrt([sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)]*n_pts)
         dy1_neg = np.float64(y1 - y_model1 > 0.0)
-        dy2_neg = np.float64(y2 - y_model2 > 0.0)
         sig1 = sf_err_max(y_model1) * dy1_neg + (1.0 - dy1_neg) * sf_err_min(y_model1)
-        sig2 = sig_err_max(l_inj*1000.0, alpha) * dy2_neg + (1.0 - dy2_neg) * sig_err_min(l_inj*1000.0, alpha)
-        sig2 *= y_model2
-        #sig2 = sig_var(Cn, l_dis, l_inj, alpha, n, 0.0) ** 0.25
+        sig2 = sig_var(Cn, l_dis, l_inj, alpha, n, 0.0) ** 0.25
         sig2 = np.sqrt(sig2*sig2+stat_err_sig[:n_pts]**2)
         return p_out, y_model1, sig1, y_model2, sig2
     
@@ -101,7 +70,7 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
         #print((ret**2).sum())
         return ret
 
-    return _nll, _comp_models
+    return _nll, _comp_models, sf_err_min, sf_err_max
 
 
 def main():
@@ -172,7 +141,7 @@ def main():
     t2 = Table.read("sigma_observed.dat", format="ascii.commented_header")
     y2 = t2["sigma"].data[:n_pts]
 
-    nll, comp_models = make_nll(prefix, l_inj_ini, free_params, no_sig)
+    nll, comp_models, sf_err_min, sf_err_max = make_nll(prefix, l_inj_ini, free_params, no_sig)
     
     def get_results(result_out, params, y_sf, y_sig):
         p_out, y_model1, sig1, y_model2, sig2 = comp_models(result_out, x, y_sf, y_sig)
@@ -184,9 +153,9 @@ def main():
         params["alpha"].append(p_out[3])
         params["cost"].append(cost1+cost2)
         params["cost_sigma"].append(cost2)
-        params["sigma"].append(y_model2[0])
-        params["sigma_err1"].append(sig2[0])
-        params["sigma_err2"].append(sig2[-1])
+        for i in range(len(y_model2)):
+            params[f"sigma_{i}"].append(y_model2[i])
+        return y_model1, y_model2, sig2
         
     if rank == 0:
         p = defaultdict(list)
@@ -196,8 +165,20 @@ def main():
             bounds=lsq_bounds,
             args=(x, y1, y2, comp_models),
         )
-        get_results(result.x, p, y1, y2)
+        y_model1, y_model2, sig2 = get_results(result.x, p, y1, y2)
         print(free_params, p)
+        tsf = Table({"sf_avg": y_model1, "sf_min": sf_err_min(y_model1), "sf_max": sf_err_max(y_model1)})
+        tsf.write(
+            f"{prefix}_{'_'.join(free_params)}__l_inj{l_inj_ini}{added_str}{sig_str}_sf_model.dat",
+            format="ascii.commented_header",
+            overwrite=True,
+        )
+        tsig = Table({"sig_avg": y_model2, "sig_err": sig2})
+        tsig.write(
+            f"{prefix}_{'_'.join(free_params)}__l_inj{l_inj_ini}{added_str}{sig_str}_sig_model.dat",
+            format="ascii.commented_header",
+            overwrite=True,
+        )
     else:
         p = None
     p = comm.bcast(p, root=0)
@@ -219,7 +200,7 @@ def main():
                     p_in.append(p2_mid[j])
                 if np3 > 1:
                     p_in.append(p3_mid[i])
-                get_results(p_in, lp, y1, y2)
+                _ = get_results(p_in, lp, y1, y2)
 
     all_lp = comm.gather(lp, root=0)
     
@@ -228,9 +209,9 @@ def main():
             for proc_lp in all_lp:
                 p[key].extend(proc_lp[key])
 
-        tout = Table(p)
-        tout.write(
-            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}.dat",
+        tp = Table(p)
+        tp.write(
+            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_params.dat",
             format="ascii.commented_header",
             overwrite=True,
         )

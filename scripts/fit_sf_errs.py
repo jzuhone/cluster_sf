@@ -20,7 +20,7 @@ sf_mean = []
 sf_min = []
 sf_max = []
 for fn in fns:
-    if "lmin_50" in fn.name or "noerr" not in fn.name:
+    if "lmin_50" in fn.name or "noerr" in fn.name:
         continue
     t = Table.read(fn, format="ascii.commented_header")
     sf_mean.append(t["SF"].data)
