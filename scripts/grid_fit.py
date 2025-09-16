@@ -169,13 +169,13 @@ def main():
         print(free_params, p)
         tsf = Table({"sf_avg": y_model1, "sf_min": sf_err_min(y_model1), "sf_max": sf_err_max(y_model1)})
         tsf.write(
-            f"{prefix}_{'_'.join(free_params)}__l_inj{l_inj_ini}{added_str}{sig_str}_sf_model.dat",
+            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sf_model.dat",
             format="ascii.commented_header",
             overwrite=True,
         )
         tsig = Table({"sig_avg": y_model2, "sig_err": sig2})
         tsig.write(
-            f"{prefix}_{'_'.join(free_params)}__l_inj{l_inj_ini}{added_str}{sig_str}_sig_model.dat",
+            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sig_model.dat",
             format="ascii.commented_header",
             overwrite=True,
         )
