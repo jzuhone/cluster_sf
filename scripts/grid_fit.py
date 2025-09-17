@@ -121,14 +121,15 @@ def main():
     if prefix == "three_pts":
         n_pts = 6
     elif prefix == "two_pts":
-        n_pts = 4
+        n_pts = 5
         
     added_str = "_added" if added else ""
     sig_str = "_nosig" if no_sig else ""
-    orig_str = "_orig" if n_pts == 4 else ""
+    orig_str = "_orig" if n_pts == 5 else ""
     t = Table.read(f"SF_observed{orig_str}{added_str}.dat", format="ascii.commented_header")
     x = t["r"].data * angular_scale.value
     y1 = t["SF"].data
+    print(y1)
     t2 = Table.read("sigma_observed.dat", format="ascii.commented_header")
     y2 = t2["sigma"].data[:n_pts]
 
@@ -142,7 +143,10 @@ def main():
         params["l_inj"].append(p_out[1])
         params["l_dis"].append(p_out[2])
         params["alpha"].append(p_out[3])
-        params["cost"].append(cost1+cost2)
+        tot_cost = cost1
+        if not no_sig:
+            tot_cost += cost2
+        params["cost"].append(tot_cost)
         params["cost_sigma"].append(cost2)
         for i in range(len(y_model2)):
             params[f"sigma_{i}"].append(y_model2[i])
