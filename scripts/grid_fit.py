@@ -4,6 +4,7 @@ from scipy.optimize import least_squares
 from cluster_sf.constants import angular_scale, sf_stat_err, alpha0, l_min0
 from astropy.table import Table
 from cluster_sf.integrals import getC, SF, sigma, sig_var
+from cluster_sf.utils import make_sf_err_func
 import argparse
 from mpi4py import MPI
 from tqdm.auto import tqdm
@@ -11,16 +12,6 @@ from tqdm.auto import tqdm
 stat_err_sig = np.array([25.0, 25.0, 25.0, 25.0, 25.0, 39.0])
 
 n = 2
-
-
-def make_sf_err_func(fn):
-    t = Table.read(fn, format="ascii.commented_header")
-    A = t["amplitude"].data
-    x0 = t["x_0"].data
-    alpha = -t["alpha"].data
-    def _sf_err_func(y):
-        return A*(y / x0)**alpha
-    return _sf_err_func
 
 
 def modify_params(params, l_inj_ini, free_params):
@@ -181,6 +172,7 @@ def main():
         )
     else:
         p = None
+
     p = comm.bcast(p, root=0)
 
     loop_range = range(np1)

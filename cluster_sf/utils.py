@@ -6,6 +6,7 @@ import h5py
 from astropy import wcs
 from astropy.constants import m_p
 from cluster_sf.constants import angular_scale
+from astropy.table import Table
 
 
 def make_wcs(Lx, nx):
@@ -92,3 +93,25 @@ def generate_realizations(vgen, num_tries, prefix, project_weight):
             d.attrs["units"] = units2
         pbar.update()
     pbar.close()
+
+
+def two_sided_std(data, axis=None):
+    data = np.asarray(data)
+    n = len(data)
+    if n < 2:
+        return np.nan, np.nan
+    mean = np.mean(data, axis=axis, keepdims=True)
+    diffs = data - mean
+    diffs_neg = diffs[diffs < 0]
+    diffs_pos = diffs[diffs > 0]
+    return np.std(diffs_neg, axis=axis), np.std(diffs_pos, axis=axis)
+
+
+def make_sf_err_func(fn):
+    t = Table.read(fn, format="ascii.commented_header")
+    A = t["amplitude"].data
+    x0 = t["x_0"].data
+    alpha = -t["alpha"].data
+    def _sf_err_func(y):
+        return A*(y / x0)**alpha
+    return _sf_err_func
