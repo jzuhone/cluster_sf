@@ -40,7 +40,6 @@ target-version = "py39"
 # by default, and isort-like import sorting. Unlike Flake8, Ruff 
 # doesn't enable pycodestyle warnings (`W`) or McCabe complexity 
 # (`C901`) by default.
-select = ["E4", "E7", "E9", "F", "I"]
 select = [
     "E",
     "F",
@@ -59,8 +58,6 @@ ignore = [
     "E741",  # Do not use variables named 'I', 'O', or 'l'
     "UP038", # non-pep604-isinstance
 ]
-
-ignore = []
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]

@@ -12,7 +12,7 @@ from cluster_sf.utils import (
 from astropy.table import Table
 import argparse
 from collections import defaultdict
-import json
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("prefix", type=str)
@@ -57,19 +57,12 @@ else:
 
 regs, seps, bins, bin_idxs, bins_used, edges = make_bins(regfile, edges=edges)
 
-seps_names = {f"{k[0]}-{k[1]}": float(v) for k, v in seps.items()}
-
-with open(f"separations_{prefix}.json", "w") as f:
-    json.dump(seps_names, f, indent=4)
-
 bin_edges = edges[bins_used]
 
 bin_ctrs = np.mean(bin_edges, axis=1)
 
 npts = len(regs)
 nbins = len(bins)
-
-print(npts, nbins)
 
 reg_masks = [reg.to_pixel(w).to_mask() for reg in regs]
 
@@ -195,8 +188,6 @@ for l_max in [100, 300, 500, 1000]:
         overwrite=True,
     )
 
-    print(sigmas.shape)
-    
     sig_avg = np.mean(sigmas, axis=0)
     d = sigmas - sig_avg
     idxs_lo = d < 0
