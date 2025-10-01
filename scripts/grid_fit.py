@@ -3,7 +3,7 @@ from collections import defaultdict
 from scipy.optimize import least_squares
 from cluster_sf.constants import angular_scale, sf_stat_err, alpha0, l_min0
 from astropy.table import Table
-from cluster_sf.integrals import getC, SF, sigma, sig_var
+from cluster_sf.integrals import getC, SF, sigma2, sigma2_var, SF_var
 from cluster_sf.utils import make_sf_err_func
 import argparse
 from mpi4py import MPI
@@ -38,27 +38,35 @@ def make_nll(prefix, l_inj_ini, free_params, no_sig):
 
     sf_err_min = make_sf_err_func(f"{prefix}_sf_err_fit_params_min.dat")
     sf_err_max = make_sf_err_func(f"{prefix}_sf_err_fit_params_max.dat")
+    trw = Table.read(f"{prefix}_radii_widths.dat", format="ascii.commented_header")
+    tavg = Table.read(f"{prefix}_avg_rw.dat", format="ascii.commented_header")
 
-    def _comp_models(params, x, y1, y2):
-        n_pts = len(y2)
+    n_pts = len(trw)
+
+    sigma_stat_sig = stat_err_sig[:n_pts]
+
+    def _comp_models(params, x, y1):
         mach, l_inj, l_dis, alpha = modify_params(params, l_inj_ini, free_params)
         p_out = np.array([mach, l_inj, l_dis, alpha])
         Cn = getC(mach, l_dis, l_inj, alpha, n)
-        y_model1 = SF(x, Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)
+        widths = tavg["areas"]**0.5
+        y_model1 = SF(x, Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n, R=tavg["radii"], width=widths)
         y_model1 += 2.0 * sf_stat_err**2
-        y_model2 = np.sqrt([sigma(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n)]*n_pts)
+        y_model2 = sigma2(Cn=Cn, l_dis=l_dis, l_inj=l_inj, alpha=alpha, n=n, R=trw["radii"], reg_width=trw["widths"])
+        exp_sig2 = y_model2
+        y_model2 += sigma_stat_sig**2
+        y_model2 **= 0.5
         dy1_neg = np.float64(y1 - y_model1 > 0.0)
         sig1 = sf_err_max(y_model1) * dy1_neg + (1.0 - dy1_neg) * sf_err_min(y_model1)
-        sig2 = sig_var(Cn, l_dis, l_inj, alpha, n, 0.0) ** 0.25
-        sig2 = np.sqrt(sig2*sig2+stat_err_sig[:n_pts]**2)
+        sig2_var = sigma2_var(Cn, l_dis, l_inj, alpha, n, R=trw["radii"], reg_width=trw["widths"])
+        sig2 = (sig2_var+4.0*exp_sig2*sigma_stat_sig**2+2.0*sigma_stat_sig**4) ** 0.25
         return p_out, y_model1, sig1, y_model2, sig2
     
     def _nll(params, x, y1, y2, cm_func):
-        _, y_model1, sig1, y_model2, sig2 = cm_func(params, x, y1, y2)
+        _, y_model1, sig1, y_model2, sig2 = cm_func(params, x, y1)
         ret = (y1 - y_model1) / sig1
         if not no_sig:
             ret = np.concatenate([ret, (y2-y_model2) / sig2])
-        #print((ret**2).sum())
         return ret
 
     return _nll, _comp_models, sf_err_min, sf_err_max
@@ -129,7 +137,6 @@ def main():
     t = Table.read(f"SF_observed{orig_str}{added_str}.dat", format="ascii.commented_header")
     x = t["r"].data * angular_scale.value
     y1 = t["SF"].data
-    print(y1)
     t2 = Table.read("sigma_observed.dat", format="ascii.commented_header")
     y2 = t2["sigma"].data[:n_pts]
 
@@ -139,17 +146,17 @@ def main():
         p_out, y_model1, sig1, y_model2, sig2 = comp_models(result_out, x, y_sf, y_sig)
         cost1 = np.sum((y_sf - y_model1) ** 2 / sig1**2)
         cost2 = np.sum((y_sig - y_model2) ** 2 / sig2**2)
-        params["mach"].append(p_out[0])
-        params["l_inj"].append(p_out[1])
-        params["l_dis"].append(p_out[2])
-        params["alpha"].append(p_out[3])
+        params["mach"].append(float(p_out[0]))
+        params["l_inj"].append(float(p_out[1]))
+        params["l_dis"].append(float(p_out[2]))
+        params["alpha"].append(float(p_out[3]))
         tot_cost = cost1
         if not no_sig:
             tot_cost += cost2
-        params["cost"].append(tot_cost)
-        params["cost_sigma"].append(cost2)
+        params["cost"].append(float(tot_cost))
+        params["cost_sigma"].append(float(cost2))
         for i in range(len(y_model2)):
-            params[f"sigma_{i}"].append(y_model2[i])
+            params[f"sigma_{i}"].append(float(y_model2[i]))
         return y_model1, y_model2, sig2
         
     if rank == 0:
@@ -162,7 +169,12 @@ def main():
         )
         y_model1, y_model2, sig2 = get_results(result.x, p, y1, y2)
         print(free_params, p)
-        tsf = Table({"sf_avg": y_model1, "sf_min": sf_err_min(y_model1), "sf_max": sf_err_max(y_model1)})
+        Cn = getC(p["mach"][0], p["l_dis"][0], p["l_inj"][0], p["alpha"][0], n)
+        tavg = Table.read(f"{prefix}_avg_rw.dat", format="ascii.commented_header")
+        widths = tavg["areas"].data**0.5
+        sf_err = SF_var(x, Cn, p["l_dis"][0], p["l_inj"][0], p["alpha"][0], n, R=tavg["radii"].data, width=widths)/(tavg["areas"]*tavg["nums"])
+        sf_err **= 0.5
+        tsf = Table({"sf_avg": y_model1, "sf_min": sf_err_min(y_model1), "sf_max": sf_err_max(y_model1), "sf_std": sf_err})
         tsf.write(
             f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sf_model.dat",
             format="ascii.commented_header",
@@ -179,6 +191,7 @@ def main():
 
     p = comm.bcast(p, root=0)
 
+    """
     loop_range = range(np1)
 
     # Divide the workload among processes
@@ -211,7 +224,7 @@ def main():
             format="ascii.commented_header",
             overwrite=True,
         )
-
+    """
 
 if __name__ == "__main__":
     main()

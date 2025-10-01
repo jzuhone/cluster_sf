@@ -60,12 +60,14 @@ def getC(mach, l_dis, l_inj, alpha, n=2):
     return Cn
 
 
-def sigma_int(k, C, l_dis, l_inj, alpha, n, R, reg_width):
+def sigma2_int(k, C, l_dis, l_inj, alpha, n, R, reg_width):
     Pg = W(k, reg_width)**2
     return 2.0 * np.pi * P2D(k, C, l_dis, l_inj, alpha, n, R) * Pg * k
 
 
-def sigma(Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0, reg_width=det_width):
+def sigma2(Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0, reg_width=det_width):
+    R = np.atleast_1d(R)
+    reg_width = np.atleast_1d(reg_width)
     int1 = quad(
         Ek,
         kmin,
@@ -74,23 +76,23 @@ def sigma(Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0, reg_
         points=(1.0, 30.0),
         epsrel=1.0e-5,
     )[0]
-    int2 = quad(
-        sigma_int,
+    int2 = np.array([quad(
+        sigma2_int,
         kmin,
         kmax,
-        args=(Cn, l_dis, l_inj, alpha, n, R, reg_width),
+        args=(Cn, l_dis, l_inj, alpha, n, rr, ww),
         points=(1.0, 30.0),
         epsrel=1.0e-5,
-    )[0]
+    )[0] for rr, ww in zip(R, reg_width)])
     return int1 - int2
 
 
-def SF_int(k, r, C, l_dis, l_inj, alpha, n, R):
-    Pg = W(k, det_width)**2
+def SF_int(k, x, C, l_dis, l_inj, alpha, n, R, width):
+    Pg = W(k, width)**2
     ret = (
         4.0
         * np.pi
-        * (1.0 - jv(0, 2.0 * np.pi * k * r))
+        * (1.0 - jv(0, 2.0 * np.pi * k * x))
         * P2D(k, C, l_dis, l_inj, alpha, n, R)
         * k
         * Pg
@@ -98,25 +100,61 @@ def SF_int(k, r, C, l_dis, l_inj, alpha, n, R):
     return ret
 
 
-def SF(x, Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0):
+def SF_var_int(k, x, C, l_dis, l_inj, alpha, n, R, width):
+    Pg = W(k, width)**2
+    p2d = P2D(k, C, l_dis, l_inj, alpha, n, R)
+    bfactor = 1.0 - jv(0, 2.0 * np.pi * k * x)
+    ret = (
+        16.0
+        * np.pi
+        * bfactor * bfactor
+        * p2d * p2d
+        * k
+        * Pg * Pg
+    )
+    return ret
+
+
+def SF_var(x, Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0, width=det_width):
+    R = np.atleast_1d(R)
+    width = np.atleast_1d(width)
+    int_upper = np.array(
+        [
+            quad(
+                SF_var_int,
+                kmin,
+                kmax,
+                args=(xx, Cn, l_dis, l_inj, alpha, n, rr, ww),
+                points=(1.0, 30.0),
+                epsrel=1.0e-5,
+            )[0]
+            for xx, rr, ww in zip(x, R, width)
+        ]
+    )
+    return int_upper
+
+
+def SF(x, Cn=1.0, l_dis=1.0e-3, l_inj=1.0, alpha=-11.0 / 3.0, n=2.0, R=0.0, width=det_width):
+    R = np.atleast_1d(R)
+    width = np.atleast_1d(width)
     int_upper = np.array(
         [
             quad(
                 SF_int,
                 kmin,
                 kmax,
-                args=(r, Cn, l_dis, l_inj, alpha, n, R),
+                args=(xx, Cn, l_dis, l_inj, alpha, n, rr, ww),
                 points=(1.0, 30.0),
                 epsrel=1.0e-5,
             )[0]
-            for r in x
+            for xx, rr, ww in zip(x, R, width)
         ]
     )
     return int_upper
 
 
 @njit
-def sig_var_int(k1, k2, C, l_dis, l_inj, alpha, n, R, reg_width):
+def sigma2_var_int(k1, k2, C, l_dis, l_inj, alpha, n, R, reg_width):
     P1 = P3D(k1, C, l_dis, l_inj, alpha, n)
     P2 = P3D(k2, C, l_dis, l_inj, alpha, n)
     epsp = eps(k1 + k2, R) * W(k1+k2, reg_width)
@@ -124,16 +162,18 @@ def sig_var_int(k1, k2, C, l_dis, l_inj, alpha, n, R, reg_width):
     return 2.0 * P1 * P2 * (epsp - epsm) ** 2
 
 
-def sig_var(C, l_dis, l_inj, alpha, n, R, reg_width=det_width):
-    return dblquad(
-        sig_var_int,
+def sigma2_var(C, l_dis, l_inj, alpha, n, R, reg_width=det_width):
+    R = np.atleast_1d(R)
+    reg_width = np.atleast_1d(reg_width)
+    return np.array([dblquad(
+        sigma2_var_int,
         kmin,
         kmax,
         kmin,
         kmax,
-        args=(C, l_dis, l_inj, alpha, n, R, reg_width),
+        args=(C, l_dis, l_inj, alpha, n, rr, ww),
         epsrel=1.0e-5,
-    )[0]
+    )[0] for rr, ww in zip(R, reg_width)])
 
 
 r = np.linspace(30e-3, 2.0, 100)
