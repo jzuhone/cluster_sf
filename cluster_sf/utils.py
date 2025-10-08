@@ -7,6 +7,10 @@ from astropy import wcs
 from astropy.constants import m_p
 from cluster_sf.constants import angular_scale
 from astropy.table import Table
+from pathlib import Path
+
+
+data_root = Path(__file__) / "../data"
 
 
 def make_wcs(Lx, nx):

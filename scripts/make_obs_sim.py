@@ -6,6 +6,7 @@ from cluster_sf.constants import sigma_xrism
 from cluster_sf.bins import make_bins
 from cluster_sf.utils import (
     compute_sigma,
+    data_root,
     make_em,
     make_wcs,
 )
@@ -13,6 +14,7 @@ from astropy.table import Table
 import argparse
 from collections import defaultdict
 
+write_path = data_root / "mock_obs"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("prefix", type=str)
@@ -154,14 +156,14 @@ for l_max in [100, 300, 500, 1000]:
 
     t = Table(shifts)
     t.write(
-        f"../data/shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
 
     t = Table(sigmas)
     t.write(
-        f"../data/sigmas_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"sigmas_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
@@ -184,8 +186,8 @@ for l_max in [100, 300, 500, 1000]:
     t["bin_num"] = bins_used
 
     t.write(
-        f"../data/SF_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
-         format="ascii.commented_header",
+        write_path / f"SF_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        format="ascii.commented_header",
         overwrite=True,
     )
 
@@ -210,7 +212,7 @@ for l_max in [100, 300, 500, 1000]:
     t = Table(data)
 
     t.write(
-        f"../data/sig_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"sig_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
