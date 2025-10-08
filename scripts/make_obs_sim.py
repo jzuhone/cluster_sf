@@ -45,8 +45,8 @@ stat_str = "" if stat_err else "_noerr"
 V_rms = compute_sigma(mach)
 V_rms1D = V_rms / np.sqrt(3)
 
-Lx, Ly, Lz = (2203.125,) * 3
-nx, ny, nz = (282,) * 3
+Lx, Ly, Lz = (2000.0,) * 3
+nx, ny, nz = (256,) * 3
 sig = sigma_xrism / (Lx / nx)
 w = make_wcs(Lx, nx)
 
@@ -85,6 +85,7 @@ else:
 
 
 def make_obs(l_max, mach):
+    print(l_max, mach, l_min)
     shifts = defaultdict(list)
     sigmas = defaultdict(list)
     mratio = mach / 0.4
@@ -153,14 +154,14 @@ for l_max in [100, 300, 500, 1000]:
 
     t = Table(shifts)
     t.write(
-        f"shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        f"../data/shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
 
     t = Table(sigmas)
     t.write(
-        f"sigmas_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        f"../data/sigmas_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
@@ -183,7 +184,7 @@ for l_max in [100, 300, 500, 1000]:
     t["bin_num"] = bins_used
 
     t.write(
-        f"SF_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        f"../data/SF_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
          format="ascii.commented_header",
         overwrite=True,
     )
@@ -209,7 +210,7 @@ for l_max in [100, 300, 500, 1000]:
     t = Table(data)
 
     t.write(
-        f"sig_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        f"../data/sig_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
