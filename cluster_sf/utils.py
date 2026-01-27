@@ -10,7 +10,7 @@ from astropy.table import Table
 from pathlib import Path
 
 
-data_root = Path(__file__) / "../data"
+data_root = Path(__file__).parent / "../data"
 
 
 def make_wcs(Lx, nx):

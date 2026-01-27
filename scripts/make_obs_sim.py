@@ -13,31 +13,27 @@ from cluster_sf.utils import (
 from astropy.table import Table
 import argparse
 from collections import defaultdict
+from pathlib import Path
+
 
 write_path = data_root / "mock_obs"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("prefix", type=str)
-parser.add_argument("l_min", type=int)
+parser.add_argument("regfile", type=str)
 parser.add_argument("mach", type=float)
-parser.add_argument("--alpha", type=float)
-parser.add_argument("--edgesfile", type=str)
 parser.add_argument("--noerr", action="store_true")
 parser.add_argument("--nopsf", action="store_true")
 
 args = parser.parse_args()
 
 prefix = args.prefix
-l_min = args.l_min
+regfile = Path(args.regfile)
 mach = args.mach
 
-if args.alpha is None:
-    alpha_str = ""
-else:
-    alpha_str = f"_a{-args.alpha}"
-edgesfile = args.edgesfile
-
-regfile = f"{prefix}.reg"
+regfilep = regfile.name.replace(regfile.suffix, "")
+edgesfile = Path(args.regfile.replace("reg", "edges"))
+errfile = Path(args.regfile.replace("reg", "errs"))
 
 convolve_it = not args.nopsf
 stat_err = not args.noerr
@@ -52,13 +48,16 @@ nx, ny, nz = (256,) * 3
 sig = sigma_xrism / (Lx / nx)
 w = make_wcs(Lx, nx)
 
-if edgesfile is None:
-    edges = None
-else:
+if edgesfile.exists():
     edges = np.loadtxt(edgesfile)
+else:
+    edges = None
 
 regs, seps, bins, bin_idxs, bins_used, edges = make_bins(regfile, edges=edges)
 
+if not edgesfile.exists():
+    np.savetxt(edgesfile, edges, delimiter="\t")
+    
 bin_edges = edges[bins_used]
 
 bin_ctrs = np.mean(bin_edges, axis=1)
@@ -70,43 +69,40 @@ reg_masks = [reg.to_pixel(w).to_mask() for reg in regs]
 
 EM = make_em(Lx, Ly, Lz, nx, ny, nz)
 EM_proj = EM.sum(axis=2)
-if convolve_it:
-    kernel = Gaussian2DKernel(sig)
-    EM_proj = convolve(EM_proj, kernel)
-
-EMr = [reg_m.cutout(EM_proj).sum() for reg_m in reg_masks]
 
 if stat_err:
-    mu_errs = np.random.normal(scale=42.72, size=(npts, 1500))
-    sig_errs = np.random.normal(scale=25.0, size=(npts, 1500))
-    if npts == 6:
-        sig_errs[5, :] = np.random.normal(scale=39.0, size=1500)
+    mu_stat, sigma_stat = np.loadtxt(errfile, unpack=True)
+    mu_errs = np.random.normal(scale=mu_stat[:, np.newaxis], size=(npts, 1500))
+    sig_errs = np.random.normal(scale=sig_stat[:, np.newaxis], size=(npts, 1500))
 else:
     mu_errs = np.zeros((npts, 1500))
     sig_errs = np.zeros((npts, 1500))
 
+kernel = Gaussian2DKernel(sig)
+
+mach0 = 0.4
 
 def make_obs(l_max, mach):
-    print(l_max, mach, l_min)
     shifts = defaultdict(list)
     sigmas = defaultdict(list)
-    mratio = mach / 0.4
+    mratio = mach / mach0
     SF_bins = [[] for _ in range(nbins)]
     k = 0
+    read_path = Path(f"/scratch2/jzuhone/data/coma_cubes/{prefix}")
     for i in range(500):
-        with h5py.File(
-            f"/scratch2/jzuhone/data/coma_cubes/lmax_{int(l_max)}_lmin_{int(l_min)}_M0.4{alpha_str}_proj_field_{i}.h5"
-        ) as f:
+        with h5py.File(read_path / f"lmax_{int(l_max)}_proj_field_{i}.h5") as f:
             for ax in "xyz":
-                m = (f[f"f{ax}"][()] * u.kpc / u.Myr).to_value("km/s")
+                m = f[f"f{ax}"][()]
                 m *= mratio
-                v = (f[f"f2{ax}"][()] * (u.kpc / u.Myr) ** 2).to_value("km**2/s**2")
+                v = f[f"f2{ax}"][()]
                 v *= mratio * mratio
                 mEM = m * EM_proj
                 vEM = v * EM_proj
                 if convolve_it:
                     mEM = convolve(mEM, kernel)
                     vEM = convolve(vEM, kernel)
+                    EM_proj = convolve(EM_proj, kernel)
+                EMr = [reg_m.cutout(EM_proj).sum() for reg_m in reg_masks]
                 mus = np.array(
                     [
                         reg_m.cutout(mEM).sum() / emr
@@ -156,14 +152,14 @@ for l_max in [100, 300, 500, 1000]:
 
     t = Table(shifts)
     t.write(
-        write_path / f"shifts_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"shifts_lmax_{l_max}_{prefix}{stat_str}_{regfilep}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
 
     t = Table(sigmas)
     t.write(
-        write_path / f"sigmas_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"sigmas_lmax_{l_max}_{prefix}{stat_str}_{regfilep}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
@@ -186,7 +182,7 @@ for l_max in [100, 300, 500, 1000]:
     t["bin_num"] = bins_used
 
     t.write(
-        write_path / f"SF_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"SF_lmax_{l_max}_{l_max}_{prefix}{stat_str}_{regfilep}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )
@@ -212,7 +208,7 @@ for l_max in [100, 300, 500, 1000]:
     t = Table(data)
 
     t.write(
-        write_path / f"sig_lmax_{l_max}_lmin_{l_min}_M{mach}{alpha_str}{stat_str}_{prefix}.dat",
+        write_path / f"sig_lmax_{l_max}_{prefix}{stat_str}_{regfilep}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )

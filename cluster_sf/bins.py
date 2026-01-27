@@ -2,7 +2,7 @@ import numpy as np
 from regions import Regions
 from collections import defaultdict
 from astropy.stats import scott_bin_width
-
+from tqdm.auto import tqdm
 
 def get_seps(regionfile):
     pts = Regions.read(regionfile)
@@ -10,7 +10,7 @@ def get_seps(regionfile):
     n_pts = len(pts)
 
     seps = {}
-    for i in range(n_pts):
+    for i in tqdm(range(n_pts), desc="Getting separations:", leave=True):
         for j in range(n_pts):
             key = (i, j)
             if key in seps or key[::-1] in seps or i == j:
