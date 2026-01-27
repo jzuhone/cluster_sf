@@ -53,52 +53,6 @@ def make_em(Lx, Ly, Lz, nx, ny, nz):
     return EM
 
 
-def generate_realizations(vgen, num_tries, prefix, project_weight):
-    sigma = vgen._compute_pspec()
-    wx = np.sum(project_weight, axis=0)
-    pbar = tqdm(leave=True, total=num_tries, desc="Generating field realizations ")
-    for i in range(num_tries):
-        vgen._generate_field(sigma=sigma)
-        vgen._post_generate()
-        gwx = vgen.gx * project_weight
-        gwy = vgen.gy * project_weight
-        gwz = vgen.gz * project_weight
-        fx = np.sum(gwx, axis=0)
-        fy = np.sum(gwy, axis=1)
-        fz = np.sum(gwz, axis=2)
-        fx /= wx
-        fy /= wx
-        fz /= wx
-        f2x = np.sum(vgen.gx * gwx, axis=0)
-        f2y = np.sum(vgen.gy * gwy, axis=1)
-        f2z = np.sum(vgen.gz * gwz, axis=2)
-        f2x /= wx
-        f2y /= wx
-        f2z /= wx
-        units2 = f"{vgen.units}**2"
-        with h5py.File(f"{prefix}_proj_field_{i}.h5", "w") as f:
-            d = f.create_dataset("x", data=vgen.x)
-            d.attrs["units"] = "kpc"
-            d = f.create_dataset("y", data=vgen.y)
-            d.attrs["units"] = "kpc"
-            d = f.create_dataset("z", data=vgen.z)
-            d.attrs["units"] = "kpc"
-            d = f.create_dataset("fx", data=fx)
-            d.attrs["units"] = vgen.units
-            d = f.create_dataset("fy", data=fy)
-            d.attrs["units"] = vgen.units
-            d = f.create_dataset("fz", data=fz)
-            d.attrs["units"] = vgen.units
-            d = f.create_dataset("f2x", data=f2x)
-            d.attrs["units"] = units2
-            d = f.create_dataset("f2y", data=f2y)
-            d.attrs["units"] = units2
-            d = f.create_dataset("f2z", data=f2z)
-            d.attrs["units"] = units2
-        pbar.update()
-    pbar.close()
-
-
 def two_sided_std(data, axis=None):
     data = np.asarray(data)
     n = len(data)
