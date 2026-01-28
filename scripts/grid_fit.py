@@ -4,7 +4,7 @@ from scipy.optimize import least_squares
 from cluster_sf.constants import angular_scale, sf_stat_err, alpha0, l_min0
 from astropy.table import Table
 from cluster_sf.integrals import getC, SF, sigma2, sigma2_var, SF_var
-from cluster_sf.utils import make_sf_err_func
+from cluster_sf.utils import make_sf_err_func, data_root
 import argparse
 from mpi4py import MPI
 from tqdm.auto import tqdm
@@ -36,10 +36,10 @@ def modify_params(params, l_inj_ini, free_params):
 
 def make_nll(prefix, l_inj_ini, free_params, no_sig):
 
-    sf_err_min = make_sf_err_func(f"{prefix}_sf_err_fit_params_min.dat")
-    sf_err_max = make_sf_err_func(f"{prefix}_sf_err_fit_params_max.dat")
-    trw = Table.read(f"{prefix}_radii_widths.dat", format="ascii.commented_header")
-    tavg = Table.read(f"{prefix}_avg_rw.dat", format="ascii.commented_header")
+    sf_err_min = make_sf_err_func(data_root / f"{prefix}_sf_err_fit_params_min.dat")
+    sf_err_max = make_sf_err_func(data_root / f"{prefix}_sf_err_fit_params_max.dat")
+    trw = Table.read(data_root / f"{prefix}_radii_widths.dat", format="ascii.commented_header")
+    tavg = Table.read(data_root / f"{prefix}_avg_rw.dat", format="ascii.commented_header")
 
     n_pts = len(trw)
 
@@ -134,16 +134,16 @@ def main():
     added_str = "_added" if added else ""
     sig_str = "_nosig" if no_sig else ""
     orig_str = "_orig" if n_pts == 5 else ""
-    t = Table.read(f"SF_observed{orig_str}{added_str}.dat", format="ascii.commented_header")
+    t = Table.read(data_root / f"SF_observed{orig_str}{added_str}.dat", format="ascii.commented_header")
     x = t["r"].data * angular_scale.value
     y1 = t["SF"].data
-    t2 = Table.read("sigma_observed.dat", format="ascii.commented_header")
+    t2 = Table.read(data_root / "sigma_observed.dat", format="ascii.commented_header")
     y2 = t2["sigma"].data[:n_pts]
 
     nll, comp_models, sf_err_min, sf_err_max = make_nll(prefix, l_inj_ini, free_params, no_sig)
     
     def get_results(result_out, params, y_sf, y_sig):
-        p_out, y_model1, sig1, y_model2, sig2 = comp_models(result_out, x, y_sf, y_sig)
+        p_out, y_model1, sig1, y_model2, sig2 = comp_models(result_out, x, y_sf)
         cost1 = np.sum((y_sf - y_model1) ** 2 / sig1**2)
         cost2 = np.sum((y_sig - y_model2) ** 2 / sig2**2)
         params["mach"].append(float(p_out[0]))
@@ -170,19 +170,19 @@ def main():
         y_model1, y_model2, sig2 = get_results(result.x, p, y1, y2)
         print(free_params, p)
         Cn = getC(p["mach"][0], p["l_dis"][0], p["l_inj"][0], p["alpha"][0], n)
-        tavg = Table.read(f"{prefix}_avg_rw.dat", format="ascii.commented_header")
+        tavg = Table.read(data_root / f"{prefix}_avg_rw.dat", format="ascii.commented_header")
         widths = tavg["areas"].data**0.5
         sf_err = SF_var(x, Cn, p["l_dis"][0], p["l_inj"][0], p["alpha"][0], n, R=tavg["radii"].data, width=widths)/(tavg["areas"]*tavg["nums"])
         sf_err **= 0.5
         tsf = Table({"sf_avg": y_model1, "sf_min": sf_err_min(y_model1), "sf_max": sf_err_max(y_model1), "sf_std": sf_err})
         tsf.write(
-            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sf_model.dat",
+            data_root / f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sf_model.dat",
             format="ascii.commented_header",
             overwrite=True,
         )
         tsig = Table({"sig_avg": y_model2, "sig_err": sig2})
         tsig.write(
-            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sig_model.dat",
+            data_root / f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_sig_model.dat",
             format="ascii.commented_header",
             overwrite=True,
         )
@@ -220,7 +220,7 @@ def main():
 
         tp = Table(p)
         tp.write(
-            f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_params.dat",
+            data_root / f"{prefix}_{'_'.join(free_params)}_l_inj{l_inj_ini}{added_str}{sig_str}_params.dat",
             format="ascii.commented_header",
             overwrite=True,
         )

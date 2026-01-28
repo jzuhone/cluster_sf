@@ -14,6 +14,7 @@ from astropy.table import Table
 import argparse
 from collections import defaultdict
 from pathlib import Path
+from tqdm.auto import tqdm
 
 
 write_path = data_root / "mock_obs"
@@ -32,8 +33,10 @@ regfile = Path(args.regfile)
 mach = args.mach
 
 regfilep = regfile.name.replace(regfile.suffix, "")
-edgesfile = Path(args.regfile.replace("reg", "edges"))
-errfile = Path(args.regfile.replace("reg", "errs"))
+edgesfile = Path(regfile.name.replace(regfile.suffix, ".edges"))
+errfile = Path(regfile.name.replace(regfile.suffix, ".errs"))
+
+print(edgesfile, errfile)
 
 convolve_it = not args.nopsf
 stat_err = not args.noerr
@@ -73,7 +76,7 @@ EM_proj = EM.sum(axis=2)
 if stat_err:
     mu_stat, sigma_stat = np.loadtxt(errfile, unpack=True)
     mu_errs = np.random.normal(scale=mu_stat[:, np.newaxis], size=(npts, 1500))
-    sig_errs = np.random.normal(scale=sig_stat[:, np.newaxis], size=(npts, 1500))
+    sig_errs = np.random.normal(scale=sigma_stat[:, np.newaxis], size=(npts, 1500))
 else:
     mu_errs = np.zeros((npts, 1500))
     sig_errs = np.zeros((npts, 1500))
@@ -82,6 +85,10 @@ kernel = Gaussian2DKernel(sig)
 
 mach0 = 0.4
 
+if convolve_it:
+    EM_proj = convolve(EM_proj, kernel)
+
+
 def make_obs(l_max, mach):
     shifts = defaultdict(list)
     sigmas = defaultdict(list)
@@ -89,19 +96,18 @@ def make_obs(l_max, mach):
     SF_bins = [[] for _ in range(nbins)]
     k = 0
     read_path = Path(f"/scratch2/jzuhone/data/coma_cubes/{prefix}")
-    for i in range(500):
+    for i in tqdm(range(500), desc="Processing maps", leave=True):
         with h5py.File(read_path / f"lmax_{int(l_max)}_proj_field_{i}.h5") as f:
             for ax in "xyz":
-                m = f[f"f{ax}"][()]
+                m = f[f"v{ax}"][()]
                 m *= mratio
-                v = f[f"f2{ax}"][()]
+                v = f[f"v2{ax}"][()]
                 v *= mratio * mratio
                 mEM = m * EM_proj
                 vEM = v * EM_proj
                 if convolve_it:
                     mEM = convolve(mEM, kernel)
                     vEM = convolve(vEM, kernel)
-                    EM_proj = convolve(EM_proj, kernel)
                 EMr = [reg_m.cutout(EM_proj).sum() for reg_m in reg_masks]
                 mus = np.array(
                     [
@@ -182,7 +188,7 @@ for l_max in [100, 300, 500, 1000]:
     t["bin_num"] = bins_used
 
     t.write(
-        write_path / f"SF_lmax_{l_max}_{l_max}_{prefix}{stat_str}_{regfilep}.dat",
+        write_path / f"SF_lmax_{l_max}_{prefix}{stat_str}_{regfilep}.dat",
         format="ascii.commented_header",
         overwrite=True,
     )

@@ -10,7 +10,7 @@ def get_seps(regionfile):
     n_pts = len(pts)
 
     seps = {}
-    for i in tqdm(range(n_pts), desc="Getting separations:", leave=True):
+    for i in tqdm(range(n_pts), desc="Getting separations", leave=True):
         for j in range(n_pts):
             key = (i, j)
             if key in seps or key[::-1] in seps or i == j:
